@@ -11,7 +11,7 @@ from paypal.standard.ipn.signals import (payment_was_successful,
 IPN_POST_PARAMS = {
     "protection_eligibility": "Ineligible",
     "last_name": "User",
-    "txn_id": "51403485VH153354B",
+    "txn_id": "VH153354B51403485",
     "receiver_email": settings.PAYPAL_RECEIVER_EMAIL,
     "payment_status": "Completed",
     "payment_gross": "10.00",
@@ -43,6 +43,63 @@ IPN_POST_PARAMS = {
     "quantity": "1",
 }
 
+IPN_POST_PARAMS_AUCTION = {
+    'protection_eligibility': 'Eligible',
+    'last_name': 'Gaarden',
+    'txn_id': '14D96004MF8903031',
+    'shipping_method': 'Default',
+    'shipping_discount': '0.00',
+    'receiver_email': settings.PAYPAL_RECEIVER_EMAIL,
+    'payment_status': 'Completed',
+    'payment_gross': '',
+    'tax': '0.00',
+    'item_name1': 'The Test Item',
+    'residence_country': 'US',
+    'address_state': 'PA',
+    'payer_status': 'verified',
+    'txn_type': 'cart',
+    'num_cart_items': '1',
+    'address_street': '21 test street',
+    'verify_sign': '1NtHArKmjsNN95vdQiJQa6JXSPocybl6Aenv7jf0wuCOcAU.',
+    'payment_date': '11:26:03 Oct 05, 2010 PDT',
+    'first_name': 'Test',
+    'mc_shipping': '0.00',
+    'item_name': 'The Test Item',
+    'item_number1': '1234567890',
+    'charset': 'UTF-8',
+    'custom': '',
+    'notify_version': '3.0',
+    'address_name': 'Test Name',
+    'for_auction': 'true',
+    'mc_gross_1': '14.95',
+    'contact_phone': '123 12345678',
+    'item_number': '1234567890',
+    'receiver_id': '258DLEHY2BDK6',
+    'transaction_subject': '',
+    'business': 'test@example.com',
+    'payer_id': '258DLEHY2BDK6',
+    'mc_handling1': '0.00',
+    'discount': '0.00',
+    'tax1': '0.00',
+    'auction_closing_date': '04:24:07 Oct 05, 2010 PDT',
+    'mc_handling': '0.00',
+    'auction_buyer_id': 'thebuyer',
+    'address_zip': '12345',
+    'payment_fee': '',
+    'address_country_code': 'US',
+    'address_city': 'Somecity',
+    'address_status': 'confirmed',
+    'insurance_amount': '0.00',
+    'quantity1': '1',
+    'address_country': 'United States',
+    'mc_fee': '0.78',
+    'mc_currency': 'USD',
+    'payer_email': 'test2@example.com',
+    'payment_type': 'instant',
+    'mc_gross': '14.95',
+    'mc_shipping1': '0.00'
+}
+
 
 class IPNTest(TestCase):    
     urls = 'paypal.standard.ipn.tests.test_urls'
@@ -54,12 +111,17 @@ class IPNTest(TestCase):
         # Monkey patch over PayPalIPN to make it get a VERFIED response.
         self.old_postback = PayPalIPN._postback
         PayPalIPN._postback = lambda self: "VERIFIED"
+
+        # Remove any receivers on the signals, these can cause the
+        # tests to fail if other apps have registered handlers.
+        payment_was_successful.receivers = []
+        payment_was_flagged.receivers = []
         
     def tearDown(self):
         settings.DEBUG = self.old_debug
         PayPalIPN._postback = self.old_postback
 
-    def assertGotSignal(self, signal, flagged):
+    def assertGotSignal(self,signal, flagged):
         # Check the signal was sent. These get lost if they don't reference self.
         self.got_signal = False
         self.signal_obj = None
@@ -109,6 +171,22 @@ class IPNTest(TestCase):
         self.client.post("/ipn/", IPN_POST_PARAMS)
         self.client.post("/ipn/", IPN_POST_PARAMS)
         self.assertEqual(len(PayPalIPN.objects.all()), 2)
-        ipn_obj = PayPalIPN.objects.order_by('-created_at')[1]
+        ipn_obj = PayPalIPN.objects.order_by('-created_at')[0]
         self.assertEqual(ipn_obj.flag, True)
-        self.assertEqual(ipn_obj.flag_info, "Duplicate txn_id. (51403485VH153354B)")
+        self.assertEqual(ipn_obj.flag_info, "Duplicate txn_id. (VH153354B51403485)")
+
+    def test_non_auction_ipn(self):
+        self.client.post("/ipn/", IPN_POST_PARAMS)
+        self.assertEqual(len(PayPalIPN.objects.all()), 1)
+        ipn_obj = PayPalIPN.objects.all()[0]
+        self.assertEqual(ipn_obj.flag, False)
+        self.assertFalse(ipn_obj.for_auction)
+        
+
+    def test_auction_ipn(self):
+        self.client.post("/ipn/", IPN_POST_PARAMS_AUCTION)
+        self.assertEqual(len(PayPalIPN.objects.all()), 1)
+        ipn_obj = PayPalIPN.objects.all()[0]
+        self.assertTrue(ipn_obj.for_auction)
+        self.assertEqual(ipn_obj.flag, False)
+        self.assertEqual(ipn_obj.item_number, "1234567890")

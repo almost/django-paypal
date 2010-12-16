@@ -88,7 +88,7 @@ class PayPalStandardBase(models.Model):
     auction_buyer_id = models.CharField(max_length=64, blank=True)
     auction_closing_date = models.DateTimeField(blank=True, null=True, help_text="HH:MM:SS DD Mmm YY, YYYY PST")
     auction_multi_item = models.IntegerField(blank=True, default=0, null=True)
-    for_auction = models.DecimalField(max_digits=64, decimal_places=2, default=0, blank=True, null=True)
+    for_auction = models.BooleanField(default=False, blank=True)
         
     # Recurring Payments Variables
     amount = models.DecimalField(max_digits=64, decimal_places=2, default=0, blank=True, null=True)
